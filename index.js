@@ -188,12 +188,43 @@ app.put('/username', auth, async (req, res) => {
         sql1 = 'SELECT * FROM users WHERE users = ?'
         const [result] = await db.query(sql1, [newUsername])
         if (result.length) {
-            return res.status(402).json({ message: "Ssername is already taken." })
+            return res.status(402).json({ message: "Surename is already taken." })
         }
         //ha minden OK, modositom a felhasznalonevet
         const sql2 = 'UPDATE users SET username = ? WHERE id = ?'
         await db.query(sql2, [newUsername, req.user.id])
         return res.status(200).json({ message: "Username successfully updated." })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error" })
+    }
+})
+
+
+//VÉDETT
+app.put('/password', auth, async (req, res) => {
+    const { nowPassword, newPassword } = req.body
+    if (!nowPassword || !newPassword) {
+        return res.status(400).json({ message: "Hiányzó bemeneti adatok" })
+    }
+    try {
+        //felhasználóhoz tartozo hashelt jelszot megkeresem
+        const sql = 'SELECT * FROM users WHERE id=?'
+        const [rows] = await db.query(sql, [req.user.id])
+        const user = rows[0];
+        const hashPassword = user.password;
+       // a jelenlegi jelszot osszevetjuk a hashelt jelszoval
+       const ok = bcrypt.compare(nowPassword,hashPassword)
+       if(!ok) {
+        return res.status(401).json({message: "Incorrect password."})
+       } 
+       //új jelszó hashelése
+       const hashnewPassword = await bcrypt.hash(newPassword, 10);
+
+       //új jelszó beállítás
+       const sql2 = 'UPDATE users SET password = ? WHERE id = ?'
+       await db.query(sql2, [hashnewPassword,req.user.id])
+       res.status(200).json({ message: "New password set successfully." })
     } catch (error) {
         console.log(error)
         res.status(500).json({ message: "Server error" })
