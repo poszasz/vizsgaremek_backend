@@ -38,8 +38,10 @@ const app = express();
 app.use(express.json())
 app.use(cookieparser())
 app.use(cors({
-    origin: '*',
-    credentials: true
+    origin: 'http://localhost:5173', // Pontosan a frontend URL-je
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }))
 
 
@@ -181,7 +183,7 @@ app.put('/username', auth, async (req, res) => {
     const { newUsername } = req.body
     //megnezem, hogy megadta e body-ban az uj felhasznalonevet a felhasznalo
     if (!newUsername) {
-        return res.status(401).json({ message: "Az új felhasználónév emgadása kötelező" })
+        return res.status(401).json({ message: "Az új felhasználónév megadása kötelező" })
     }
     try {
         //megnezem, hogy a felhasznalonev szerepel e a rendszerben
