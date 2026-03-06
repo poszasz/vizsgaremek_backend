@@ -65,26 +65,57 @@ app.post('/registration', async (req, res) => {
     if (!email || !username || !password) {
         return res.status(400).json({ message: "Missing data" })
     }
+    
+    const connection = await db.getConnection()
+    
     try {
+        await connection.beginTransaction()
+        
         const isValid = await emailValidator(email)
         if (!isValid) {
+            await connection.rollback()
             return res.status(401).json({ message: "Email address is not valid." })
         }
 
         const usernameEmailSQL = 'SELECT * FROM users WHERE email = ? OR username = ?'
-        const [exists] = await db.query(usernameEmailSQL, [email, username])
+        const [exists] = await connection.query(usernameEmailSQL, [email, username])
         if (exists.length) {
+            await connection.rollback()
             return res.status(402).json({ message: "The username or email is already taken." })
         }
 
         const hash = await bcrypt.hash(password, 10)
         const registrationSQL = 'INSERT INTO users (email, username, password) VALUES (?, ?, ?)'
-        const [result] = await db.query(registrationSQL, [email, username, hash])
-
-        return res.status(200).json({ message: "Registration successful!", id: result.insertId })
+        const [result] = await connection.query(registrationSQL, [email, username, hash])
+        
+        const newUserId = result.insertId
+        
+        // 10 pack hozzáadása az új felhasználónak
+        const packValues = []
+        for (let i = 0; i < 10; i++) {
+            packValues.push([newUserId])
+        }
+        
+        await connection.query(
+            'INSERT INTO user_packs (user_id) VALUES ?',
+            [packValues]
+        )
+        
+        await connection.commit()
+        
+        console.log(`New user registered: ${username} (ID: ${newUserId}) with 10 starter packs`)
+        
+        return res.status(200).json({ 
+            message: "Registration successful! You received 10 starter packs.", 
+            id: newUserId 
+        })
+        
     } catch (error) {
+        await connection.rollback()
         console.log(error)
         return res.status(500).json({ message: "Server error!" })
+    } finally {
+        connection.release()
     }
 })
 
@@ -250,13 +281,15 @@ app.get('/my-cards', auth, async (req, res) => {
     try {
         const sql = `
             SELECT 
-                user_cards.id,
-                user_cards.acquired_at,
-                cards.*
-            FROM user_cards 
-            INNER JOIN cards ON user_cards.card_id = cards.id 
-            WHERE user_cards.user_id = ?
-            ORDER BY cards.manufacturer, cards.name
+                uc.id,
+                uc.acquired_at,
+                c.*,
+                CASE WHEN ml.id IS NOT NULL THEN true ELSE false END as is_listed
+            FROM user_cards uc
+            INNER JOIN cards c ON uc.card_id = c.id
+            LEFT JOIN market_listings ml ON uc.id = ml.user_card_id AND ml.status = 'active'
+            WHERE uc.user_id = ?
+            ORDER BY c.manufacturer, c.name
         `
         const [rows] = await db.query(sql, [req.user.id])
 
