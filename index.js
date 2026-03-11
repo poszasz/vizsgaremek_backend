@@ -276,7 +276,7 @@ app.delete('/account', auth, async (req, res) => {
     }
 })
 
-// SAJÁT KÁRTYÁK LEKÉRÉSE
+// SAJÁT KÁRTYÁK LEKÉRÉSE (módosított)
 app.get('/my-cards', auth, async (req, res) => {
     try {
         const sql = `
@@ -284,10 +284,12 @@ app.get('/my-cards', auth, async (req, res) => {
                 uc.id,
                 uc.acquired_at,
                 c.*,
-                CASE WHEN ml.id IS NOT NULL THEN true ELSE false END as is_listed
+                CASE WHEN ml.id IS NOT NULL AND ml.status = 'active' THEN true ELSE false END as is_listed,
+                CASE WHEN mo.id IS NOT NULL AND mo.status = 'pending' THEN true ELSE false END as is_offered
             FROM user_cards uc
             INNER JOIN cards c ON uc.card_id = c.id
             LEFT JOIN market_listings ml ON uc.id = ml.user_card_id AND ml.status = 'active'
+            LEFT JOIN market_offers mo ON uc.id = mo.offered_user_card_id AND mo.status = 'pending'
             WHERE uc.user_id = ?
             ORDER BY c.manufacturer, c.name
         `
@@ -437,6 +439,38 @@ app.post('/make-offer', auth, async (req, res) => {
     }
 })
 
+// ========== SAJÁT FÜGGŐBEN LÉVŐ OFFEREK LEKÉRÉSE ==========
+app.get('/my-pending-offers', auth, async (req, res) => {
+    try {
+        const sql = `
+            SELECT 
+                mo.id as offer_id,
+                mo.offered_user_card_id,
+                mo.status,
+                mo.created_at,
+                ml.id as listing_id,
+                c.manufacturer,
+                c.name,
+                c.horsepower
+            FROM market_offers mo
+            INNER JOIN market_listings ml ON mo.listing_id = ml.id
+            INNER JOIN user_cards uc ON mo.offered_user_card_id = uc.id
+            INNER JOIN cards c ON uc.card_id = c.id
+            WHERE uc.user_id = ? AND mo.status = 'pending'
+            ORDER BY mo.created_at DESC
+        `
+        const [rows] = await db.query(sql, [req.user.id])
+
+        res.status(200).json({
+            message: "Pending offers retrieved successfully",
+            offers: rows
+        })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error!", offers: [] })
+    }
+})
+
 // ========== AJÁNLAT ELFOGADÁSA ==========
 app.post('/accept-offer/:offerId', auth, async (req, res) => {
     const { offerId } = req.params
@@ -543,9 +577,9 @@ app.delete('/listing/:listingId', auth, async (req, res) => {
     const { listingId } = req.params
 
     try {
-        // Ellenőrizzük, hogy a listing a felhasználóé-e
+        // Ellenőrizzük, hogy a listing a felhasználóé-e ÉS lekérjük a user_card_id-t
         const checkSql = `
-            SELECT ml.* 
+            SELECT ml.*, uc.id as user_card_id
             FROM market_listings ml
             INNER JOIN user_cards uc ON ml.user_card_id = uc.id
             WHERE ml.id = ? AND uc.user_id = ?
@@ -556,8 +590,18 @@ app.delete('/listing/:listingId', auth, async (req, res) => {
             return res.status(403).json({ message: "You don't own this listing" })
         }
 
-        // Listing törlése (vagy státusz frissítése)
+        // Listing törlése (státusz frissítése cancelled-re)
         await db.query('UPDATE market_listings SET status = "cancelled" WHERE id = ?', [listingId])
+
+        // A hozzá tartozó függőben lévő offerek státuszának frissítése
+        await db.query('UPDATE market_offers SET status = "rejected" WHERE listing_id = ? AND status = "pending"', [listingId])
+
+        // Ha a kártyának voltak saját offerjei (ahol ő ajánlotta fel), azokat is elutasítjuk
+        await db.query(`
+            UPDATE market_offers 
+            SET status = 'rejected' 
+            WHERE offered_user_card_id = ? AND status = 'pending'
+        `, [listing[0].user_card_id])
 
         res.status(200).json({ message: "Listing cancelled successfully" })
     } catch (error) {
@@ -690,6 +734,76 @@ app.post('/open-pack', auth, async (req, res) => {
         res.status(500).json({ message: "Server error during pack opening!" })
     } finally {
         connection.release()
+    }
+})
+
+// ========== OFFER TÖRLÉSE ==========
+app.delete('/offer/:offerId', auth, async (req, res) => {
+    const { offerId } = req.params
+
+    try {
+        // Ellenőrizzük, hogy az offer a felhasználóé-e (ő ajánlotta fel a kártyáját)
+        const checkSql = `
+            SELECT mo.*, uc.user_id as offer_owner_id
+            FROM market_offers mo
+            INNER JOIN user_cards uc ON mo.offered_user_card_id = uc.id
+            WHERE mo.id = ?
+        `
+        const [offer] = await db.query(checkSql, [offerId])
+
+        if (offer.length === 0) {
+            return res.status(404).json({ message: "Offer not found" })
+        }
+
+        // Ellenőrizzük, hogy a bejelentkezett felhasználó a tulajdonosa-e az offernek
+        if (offer[0].offer_owner_id !== req.user.id) {
+            return res.status(403).json({ message: "You don't own this offer" })
+        }
+
+        // Csak pending státuszú offert lehet törölni
+        if (offer[0].status !== 'pending') {
+            return res.status(400).json({ message: "Only pending offers can be deleted" })
+        }
+
+        // Offer törlése (státusz frissítése cancelled-re)
+        await db.query('UPDATE market_offers SET status = "rejected" WHERE id = ?', [offerId])
+
+        res.status(200).json({ message: "Offer cancelled successfully" })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error!" })
+    }
+})
+
+
+// ========== LISTING TÖRLÉSE (MÁR LÉTEZIK, DE BIZTOS) ==========
+app.delete('/listing/:listingId', auth, async (req, res) => {
+    const { listingId } = req.params
+
+    try {
+        // Ellenőrizzük, hogy a listing a felhasználóé-e
+        const checkSql = `
+            SELECT ml.* 
+            FROM market_listings ml
+            INNER JOIN user_cards uc ON ml.user_card_id = uc.id
+            WHERE ml.id = ? AND uc.user_id = ?
+        `
+        const [listing] = await db.query(checkSql, [listingId, req.user.id])
+
+        if (listing.length === 0) {
+            return res.status(403).json({ message: "You don't own this listing" })
+        }
+
+        // Listing törlése (státusz frissítése cancelled-re)
+        await db.query('UPDATE market_listings SET status = "cancelled" WHERE id = ?', [listingId])
+
+        // Opcionális: A hozzá tartozó függőben lévő offerek státuszának frissítése
+        await db.query('UPDATE market_offers SET status = "rejected" WHERE listing_id = ? AND status = "pending"', [listingId])
+
+        res.status(200).json({ message: "Listing cancelled successfully" })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error!" })
     }
 })
 
