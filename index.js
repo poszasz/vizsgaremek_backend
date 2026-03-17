@@ -47,13 +47,21 @@ app.use(cors({
 function auth(req, res, next) {
     const token = req.cookies[COOKIE_NAME]
     if (!token) {
+<<<<<<< HEAD
         return res.status(401).json({ message: "You are not logged in." })
+=======
+        return res.status(409).json({ message: "You are not logged in." })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
     }
     try {
         req.user = jwt.verify(token, JWT_SECRET)
         next();
     } catch (error) {
+<<<<<<< HEAD
         return res.status(401).json({ message: "Your session has expired." })
+=======
+        return res.status(410).json({ message: "Your session has expired." })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
     }
 }
 
@@ -74,14 +82,22 @@ app.post('/registration', async (req, res) => {
         const isValid = await emailValidator(email)
         if (!isValid) {
             await connection.rollback()
+<<<<<<< HEAD
             return res.status(400).json({ message: "Email address is not valid." })
+=======
+            return res.status(401).json({ message: "Email address is not valid." })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         }
 
         const usernameEmailSQL = 'SELECT * FROM users WHERE email = ? OR username = ?'
         const [exists] = await connection.query(usernameEmailSQL, [email, username])
         if (exists.length) {
             await connection.rollback()
+<<<<<<< HEAD
             return res.status(409).json({ message: "The username or email is already taken." })
+=======
+            return res.status(402).json({ message: "The username or email is already taken." })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         }
 
         const hash = await bcrypt.hash(password, 10)
@@ -134,21 +150,33 @@ app.post('/login', async (req, res) => {
             const sql = 'SELECT * FROM users WHERE email = ?'
             const [rows] = await db.query(sql, [usernameOrEmail])
             if (rows.length === 0) {
+<<<<<<< HEAD
                 return res.status(401).json({ message: "Incorrect email or password." })
+=======
+                return res.status(402).json({ message: "Incorrect email or password." })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
             }
             user = rows[0]
         } else {
             const sql = 'SELECT * FROM users WHERE username = ?'
             const [rows] = await db.query(sql, [usernameOrEmail])
             if (rows.length === 0) {
+<<<<<<< HEAD
                 return res.status(401).json({ message: "Incorrect email or password." })
+=======
+                return res.status(402).json({ message: "Incorrect email or password." })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
             }
             user = rows[0]
         }
 
         const passwordMatch = await bcrypt.compare(password, user.password)
         if (!passwordMatch) {
+<<<<<<< HEAD
             return res.status(401).json({ message: "Wrong password" })
+=======
+            return res.status(403).json({ message: "Wrong password" })
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         }
 
         const token = jwt.sign(
@@ -184,13 +212,113 @@ app.get('/adataim', auth, async (req, res) => {
     res.status(200).json(req.user)
 })
 
+<<<<<<< HEAD
 /// SAJÁT KÁRTYÁK LEKÉRÉSE (JAVÍTVA)
+=======
+// EMAIL MÓDOSÍTÁS
+app.put('/email', auth, async (req, res) => {
+    const { newEmail } = req.body
+    if (!newEmail) {
+        return res.status(401).json({ message: "Email is required." })
+    }
+
+    const isValid = await emailValidator(newEmail)
+    if (!isValid) {
+        return res.status(402).json({ message: "Enter a valid email." })
+    }
+
+    try {
+        const sql1 = 'SELECT * FROM users WHERE email = ?'
+        const [result] = await db.query(sql1, [newEmail])
+        if (result.length) {
+            return res.status(403).json({ message: "Email is already taken." })
+        }
+
+        const sql2 = 'UPDATE users SET email = ? WHERE id = ?'
+        await db.query(sql2, [newEmail, req.user.id])
+        return res.status(200).json({ message: "Email successfully updated." })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error!" })
+    }
+})
+
+// FELHASZNÁLÓNÉV MÓDOSÍTÁS
+app.put('/username', auth, async (req, res) => {
+    const { newUsername } = req.body
+    if (!newUsername) {
+        return res.status(401).json({ message: "New username is required" })
+    }
+
+    try {
+        const sql1 = 'SELECT * FROM users WHERE username = ?'
+        const [result] = await db.query(sql1, [newUsername])
+        if (result.length) {
+            return res.status(402).json({ message: "Username is already taken." })
+        }
+
+        const sql2 = 'UPDATE users SET username = ? WHERE id = ?'
+        await db.query(sql2, [newUsername, req.user.id])
+        return res.status(200).json({ message: "Username successfully updated." })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error" })
+    }
+})
+
+// JELSZÓ MÓDOSÍTÁS
+app.put('/password', auth, async (req, res) => {
+    const { nowPassword, newPassword } = req.body
+    if (!nowPassword || !newPassword) {
+        return res.status(400).json({ message: "Missing data" })
+    }
+
+    try {
+        const sql = 'SELECT * FROM users WHERE id = ?'
+        const [rows] = await db.query(sql, [req.user.id])
+        const user = rows[0];
+        const hashPassword = user.password;
+
+        const passwordMatch = await bcrypt.compare(nowPassword, hashPassword)
+        if (!passwordMatch) {
+            return res.status(401).json({ message: "Incorrect password." })
+        }
+
+        const newHash = await bcrypt.hash(newPassword, 10);
+        const sql2 = 'UPDATE users SET password = ? WHERE id = ?'
+        await db.query(sql2, [newHash, req.user.id])
+        res.status(200).json({ message: "New password set successfully." })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error" })
+    }
+})
+
+// FELHASZNÁLÓ TÖRLÉSE
+app.delete('/account', auth, async (req, res) => {
+    try {
+        const sql = 'DELETE FROM users WHERE id = ?'
+        await db.query(sql, [req.user.id])
+        res.clearCookie(COOKIE_NAME, { path: '/' })
+        res.status(200).json({ message: "Account successfully deleted" })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error" })
+    }
+})
+
+// SAJÁT KÁRTYÁK LEKÉRÉSE (módosított)
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.get('/my-cards', auth, async (req, res) => {
     try {
         const sql = `
             SELECT 
+<<<<<<< HEAD
                 uc.id as user_card_id,  -- Ez a user_cards.id (1,2,3,4)
                 uc.card_id,              -- Ez a cards.id (25,35,36,41)
+=======
+                uc.id,
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
                 uc.acquired_at,
                 c.*,
                 CASE WHEN ml.id IS NOT NULL AND ml.status = 'active' THEN true ELSE false END as is_listed,
@@ -203,11 +331,15 @@ app.get('/my-cards', auth, async (req, res) => {
             ORDER BY c.manufacturer, c.name
         `
         const [rows] = await db.query(sql, [req.user.id])
+<<<<<<< HEAD
         
         console.log("===== BACKEND VÁLASZ (JAVÍTVA) =====");
         console.log(rows);
         console.log("==========================");
         
+=======
+
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         res.status(200).json({
             message: "Cards retrieved successfully",
             cards: rows
@@ -218,7 +350,11 @@ app.get('/my-cards', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
 // MARKET LISTINGOK LEKÉRÉSE
+=======
+// ========== MARKET LISTINGOK LEKÉRÉSE ==========
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.get('/market-listings', auth, async (req, res) => {
     try {
         const sql = `
@@ -249,6 +385,7 @@ app.get('/market-listings', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
 // ÚJ LISTING LÉTREHOZÁSA (DEBUG VERZIÓ)
 app.post('/create-listing', auth, async (req, res) => {
     const { userCardId } = req.body
@@ -294,11 +431,28 @@ app.post('/create-listing', auth, async (req, res) => {
         if (userCard.length === 0) {
             await connection.rollback()
             console.log("15. HIBA: A kártya nem a felhasználóé!");
+=======
+// ========== ÚJ LISTING LÉTREHOZÁSA ==========
+app.post('/create-listing', auth, async (req, res) => {
+    const { userCardId } = req.body
+
+    if (!userCardId) {
+        return res.status(400).json({ message: "Missing data" })
+    }
+
+    try {
+        // Ellenőrizzük, hogy a kártya a felhasználóé-e
+        const checkSql = 'SELECT * FROM user_cards WHERE id = ? AND user_id = ?'
+        const [userCard] = await db.query(checkSql, [userCardId, req.user.id])
+
+        if (userCard.length === 0) {
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
             return res.status(403).json({ message: "You don't own this card" })
         }
 
         // Ellenőrizzük, hogy nincs-e már aktív listingje
         const existingSql = 'SELECT * FROM market_listings WHERE user_card_id = ? AND status = "active"'
+<<<<<<< HEAD
         const [existing] = await connection.query(existingSql, [userCardId])
 
         if (existing.length > 0) {
@@ -323,12 +477,24 @@ app.post('/create-listing', auth, async (req, res) => {
 
         await connection.commit()
         console.log("18. SIKER! Listing létrehozva, ID:", result.insertId);
+=======
+        const [existing] = await db.query(existingSql, [userCardId])
+
+        if (existing.length > 0) {
+            return res.status(400).json({ message: "This card is already listed" })
+        }
+
+        // Új listing létrehozása
+        const insertSql = 'INSERT INTO market_listings (user_card_id, status) VALUES (?, "active")'
+        const [result] = await db.query(insertSql, [userCardId])
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 
         res.status(200).json({
             message: "Listing created successfully",
             listingId: result.insertId
         })
     } catch (error) {
+<<<<<<< HEAD
         await connection.rollback()
         console.log("19. HIBA a tranzakcióban:", error);
         res.status(500).json({ message: "Server error!" })
@@ -338,6 +504,14 @@ app.post('/create-listing', auth, async (req, res) => {
 })
 
 // AJÁNLAT TÉTELE
+=======
+        console.log(error)
+        res.status(500).json({ message: "Server error!" })
+    }
+})
+
+// ========== AJÁNLAT TÉTELE ==========
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.post('/make-offer', auth, async (req, res) => {
     const { listingId, offeredUserCardId } = req.body
 
@@ -382,6 +556,7 @@ app.post('/make-offer', auth, async (req, res) => {
             return res.status(400).json({ message: "You cannot offer on your own listing" })
         }
 
+<<<<<<< HEAD
         // Ellenőrizzük, hogy a felajánlott kártyának nincs-e már aktív listingje
         const cardListingSql = 'SELECT * FROM market_listings WHERE user_card_id = ? AND status = "active"'
         const [cardListing] = await connection.query(cardListingSql, [offeredUserCardId])
@@ -402,6 +577,10 @@ app.post('/make-offer', auth, async (req, res) => {
 
         // Ajánlat létrehozása
         const offerSql = 'INSERT INTO market_offers (listing_id, offered_user_card_id, status, created_at) VALUES (?, ?, "pending", NOW())'
+=======
+        // Ajánlat létrehozása
+        const offerSql = 'INSERT INTO market_offers (listing_id, offered_user_card_id, status) VALUES (?, ?, "pending")'
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         const [result] = await connection.query(offerSql, [listingId, offeredUserCardId])
 
         await connection.commit()
@@ -419,7 +598,11 @@ app.post('/make-offer', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
 // SAJÁT FÜGGŐBEN LÉVŐ OFFEREK LEKÉRÉSE
+=======
+// ========== SAJÁT FÜGGŐBEN LÉVŐ OFFEREK LEKÉRÉSE ==========
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.get('/my-pending-offers', auth, async (req, res) => {
     try {
         const sql = `
@@ -431,10 +614,14 @@ app.get('/my-pending-offers', auth, async (req, res) => {
                 ml.id as listing_id,
                 c.manufacturer,
                 c.name,
+<<<<<<< HEAD
                 c.horsepower,
                 c.acceleration,
                 c.fuel,
                 c.image_url
+=======
+                c.horsepower
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
             FROM market_offers mo
             INNER JOIN market_listings ml ON mo.listing_id = ml.id
             INNER JOIN user_cards uc ON mo.offered_user_card_id = uc.id
@@ -454,7 +641,11 @@ app.get('/my-pending-offers', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
 // AJÁNLAT ELFOGADÁSA
+=======
+// ========== AJÁNLAT ELFOGADÁSA ==========
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.post('/accept-offer/:offerId', auth, async (req, res) => {
     const { offerId } = req.params
 
@@ -527,7 +718,11 @@ app.post('/accept-offer/:offerId', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
 // SAJÁT LISTINGEK LEKÉRÉSE
+=======
+// ========== SAJÁT LISTINGEK LEKÉRÉSE ==========
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.get('/my-listings', auth, async (req, res) => {
     try {
         const sql = `
@@ -555,6 +750,7 @@ app.get('/my-listings', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
 // LISTING TÖRLÉSE (CANCELLED státusz)
 app.delete('/listing/:listingId', auth, async (req, res) => {
     const { listingId } = req.params
@@ -565,12 +761,21 @@ app.delete('/listing/:listingId', auth, async (req, res) => {
         await connection.beginTransaction()
 
         // Ellenőrizzük, hogy a listing a felhasználóé-e
+=======
+// ========== LISTING TÖRLÉSE ==========
+app.delete('/listing/:listingId', auth, async (req, res) => {
+    const { listingId } = req.params
+
+    try {
+        // Ellenőrizzük, hogy a listing a felhasználóé-e ÉS lekérjük a user_card_id-t
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         const checkSql = `
             SELECT ml.*, uc.id as user_card_id
             FROM market_listings ml
             INNER JOIN user_cards uc ON ml.user_card_id = uc.id
             WHERE ml.id = ? AND uc.user_id = ?
         `
+<<<<<<< HEAD
         const [listing] = await connection.query(checkSql, [listingId, req.user.id])
 
         if (listing.length === 0) {
@@ -644,11 +849,35 @@ app.delete('/offer/:offerId', auth, async (req, res) => {
 
         res.status(200).json({ message: "Offer cancelled successfully" })
     } catch (error) {
+=======
+        const [listing] = await db.query(checkSql, [listingId, req.user.id])
+
+        if (listing.length === 0) {
+            return res.status(403).json({ message: "You don't own this listing" })
+        }
+
+        // Listing törlése (státusz frissítése cancelled-re)
+        await db.query('UPDATE market_listings SET status = "cancelled" WHERE id = ?', [listingId])
+
+        // A hozzá tartozó függőben lévő offerek státuszának frissítése
+        await db.query('UPDATE market_offers SET status = "rejected" WHERE listing_id = ? AND status = "pending"', [listingId])
+
+        // Ha a kártyának voltak saját offerjei (ahol ő ajánlotta fel), azokat is elutasítjuk
+        await db.query(`
+            UPDATE market_offers 
+            SET status = 'rejected' 
+            WHERE offered_user_card_id = ? AND status = 'pending'
+        `, [listing[0].user_card_id])
+
+        res.status(200).json({ message: "Listing cancelled successfully" })
+    } catch (error) {
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         console.log(error)
         res.status(500).json({ message: "Server error!" })
     }
 })
 
+<<<<<<< HEAD
 // PACKOK LEKÉRÉSE (JAVÍTVA - duplikáció eltávolítva)
 app.get('/my-packs', auth, async (req, res) => {
     try {
@@ -661,13 +890,71 @@ app.get('/my-packs', auth, async (req, res) => {
             message: "Packs retrieved successfully",
             packs: rows[0].pack_count || 0
         })
+=======
+// ========== PACKOK LEKÉRÉSE ==========
+app.get('/my-packs', auth, async (req, res) => {
+    try {
+        // Ellenőrizzük, hogy van-e user_packs tábla
+        const [tableCheck] = await db.query("SHOW TABLES LIKE 'user_packs'")
+        
+        if (tableCheck.length > 0) {
+            // Ha van user_packs tábla, abból számoljuk
+            const [rows] = await db.query(
+                'SELECT COUNT(*) as pack_count FROM user_packs WHERE user_id = ?',
+                [req.user.id]
+            )
+            console.log(`User ${req.user.id} has ${rows[0].pack_count} packs`)
+            return res.status(200).json({ 
+                message: "Packs retrieved successfully",
+                packs: rows[0].pack_count || 0
+            })
+        } else {
+            return res.status(200).json({ 
+                message: "Packs retrieved successfully",
+                packs: 0
+            })
+        }
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
     } catch (error) {
         console.error("Error in /my-packs:", error)
         res.status(500).json({ message: "Server error!", packs: 0 })
     }
 })
 
+<<<<<<< HEAD
 // PACK NYITÁS
+=======
+// ========== PACKOK LEKÉRÉSE ==========
+app.get('/my-packs', auth, async (req, res) => {
+    try {
+        // Ellenőrizzük, hogy van-e user_packs tábla
+        const [tableCheck] = await db.query("SHOW TABLES LIKE 'user_packs'")
+        
+        if (tableCheck.length > 0) {
+            // Ha van user_packs tábla, abból számoljuk
+            const [rows] = await db.query(
+                'SELECT COUNT(*) as pack_count FROM user_packs WHERE user_id = ?',
+                [req.user.id]
+            )
+            console.log(`User ${req.user.id} has ${rows[0].pack_count} packs`)
+            return res.status(200).json({ 
+                message: "Packs retrieved successfully",
+                packs: rows[0].pack_count || 0
+            })
+        } else {
+            return res.status(200).json({ 
+                message: "Packs retrieved successfully",
+                packs: 0
+            })
+        }
+    } catch (error) {
+        console.error("Error in /my-packs:", error)
+        res.status(500).json({ message: "Server error!", packs: 0 })
+    }
+})
+
+// ========== PACK NYITÁS ==========
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 app.post('/open-pack', auth, async (req, res) => {
     const connection = await db.getConnection()
     
@@ -713,6 +1000,10 @@ app.post('/open-pack', auth, async (req, res) => {
         
         console.log(`User ${req.user.id} opened a pack and got: ${selectedCard.manufacturer} ${selectedCard.name}`)
         
+<<<<<<< HEAD
+=======
+        // 5. Válasz küldése (típus nélkül)
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
         res.status(200).json({ 
             message: "Pack opened successfully!",
             card: {
@@ -735,6 +1026,80 @@ app.post('/open-pack', auth, async (req, res) => {
     }
 })
 
+<<<<<<< HEAD
+=======
+// ========== OFFER TÖRLÉSE ==========
+app.delete('/offer/:offerId', auth, async (req, res) => {
+    const { offerId } = req.params
+
+    try {
+        // Ellenőrizzük, hogy az offer a felhasználóé-e (ő ajánlotta fel a kártyáját)
+        const checkSql = `
+            SELECT mo.*, uc.user_id as offer_owner_id
+            FROM market_offers mo
+            INNER JOIN user_cards uc ON mo.offered_user_card_id = uc.id
+            WHERE mo.id = ?
+        `
+        const [offer] = await db.query(checkSql, [offerId])
+
+        if (offer.length === 0) {
+            return res.status(404).json({ message: "Offer not found" })
+        }
+
+        // Ellenőrizzük, hogy a bejelentkezett felhasználó a tulajdonosa-e az offernek
+        if (offer[0].offer_owner_id !== req.user.id) {
+            return res.status(403).json({ message: "You don't own this offer" })
+        }
+
+        // Csak pending státuszú offert lehet törölni
+        if (offer[0].status !== 'pending') {
+            return res.status(400).json({ message: "Only pending offers can be deleted" })
+        }
+
+        // Offer törlése (státusz frissítése cancelled-re)
+        await db.query('UPDATE market_offers SET status = "rejected" WHERE id = ?', [offerId])
+
+        res.status(200).json({ message: "Offer cancelled successfully" })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error!" })
+    }
+})
+
+
+// ========== LISTING TÖRLÉSE (MÁR LÉTEZIK, DE BIZTOS) ==========
+app.delete('/listing/:listingId', auth, async (req, res) => {
+    const { listingId } = req.params
+
+    try {
+        // Ellenőrizzük, hogy a listing a felhasználóé-e
+        const checkSql = `
+            SELECT ml.* 
+            FROM market_listings ml
+            INNER JOIN user_cards uc ON ml.user_card_id = uc.id
+            WHERE ml.id = ? AND uc.user_id = ?
+        `
+        const [listing] = await db.query(checkSql, [listingId, req.user.id])
+
+        if (listing.length === 0) {
+            return res.status(403).json({ message: "You don't own this listing" })
+        }
+
+        // Listing törlése (státusz frissítése cancelled-re)
+        await db.query('UPDATE market_listings SET status = "cancelled" WHERE id = ?', [listingId])
+
+        // Opcionális: A hozzá tartozó függőben lévő offerek státuszának frissítése
+        await db.query('UPDATE market_offers SET status = "rejected" WHERE listing_id = ? AND status = "pending"', [listingId])
+
+        res.status(200).json({ message: "Listing cancelled successfully" })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error!" })
+    }
+})
+
+
+>>>>>>> 994bd3400db3c84195b2512797967f26f108f68e
 // SZERVER INDÍTÁSA
 app.listen(PORT, HOST, () => {
     console.log(`API fut: http://${HOST}:${PORT}/`)
